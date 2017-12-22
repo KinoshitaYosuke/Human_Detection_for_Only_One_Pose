@@ -259,7 +259,7 @@ int main(int argc, char** argv) {
 	//テスト画像ファイル一覧メモ帳読み込み
 	char test_name[1024];
 	FILE *test_data;
-	if (fopen_s(&test_data, "c:/photo/test_data.txt", "r")==NULL) {
+	if (fopen_s(&test_data, "list.txt", "r")==NULL) {
 		cout << "miss" << endl;
 		return 0;
 	}
