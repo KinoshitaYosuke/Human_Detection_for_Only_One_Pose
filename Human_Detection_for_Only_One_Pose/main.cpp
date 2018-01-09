@@ -12,7 +12,7 @@
 #include <math.h>
 #include "svm.h"
 
-#define YUDO_CD 0.9
+#define YUDO_CD 0.5
 
 using namespace std;
 
@@ -241,389 +241,200 @@ int dimension(int x, int y) {
 		return 81 * (x / 6 - 1) * (y / 6 - 1);
 }
 
+
 int main(int argc, char** argv) {
 	//変数宣言
 	//	int x, y;
 
 	int file_num = 1;
 
-	int count_all, count_sta, count_squ, count_lie;
+	int count = 0;
 	int hog_dim;
 
-	//CoarseDetectorの取り込み
-	if ((CD = svm_load_model("C:/model_file/pre_model/CD_pre.model")) == 0)exit(1);
-	if ((Stand = svm_load_model("C:/model_file/pre_model/Stand.model")) == 0)exit(1);
-	if ((Squat = svm_load_model("C:/model_file/pre_model/Squat.model")) == 0)exit(1);
-	if ((Lie = svm_load_model("C:/model_file/pre_model/Lie.model")) == 0)exit(1);
+	//検出器の取り込み
+	if ((CD = svm_load_model("C:/model_file/pre_model/CD_123.model")) == 0)exit(1);
+
 
 	//テスト画像ファイル一覧メモ帳読み込み
-	char test_name[1024];
-	FILE *test_data;
-	if (fopen_s(&test_data, "list.txt", "r")==NULL) {
-		cout << "miss" << endl;
+	char test_name[1024], result_name[1024];
+	FILE *test_data, *result_data;
+	if (fopen_s(&test_data, "c:/photo/test_list.txt", "r") != 0) {
+		cout << "missing" << endl;
 		return 0;
 	}
-	
-
 
 	while (fgets(test_name, 256, test_data) != NULL) {
-		string name = test_name;
-		char test[1024]="";
-
-		for (int i = 0; name.length() - 1; i++) {
-			test[i] = test_name[i];
-			test[i + 1] = '\0';
+		string name_tes = test_name;
+		char new_test_name[1024];
+		for (int i = 0; i < name_tes.length() - 1; i++) {
+			new_test_name[i] = test_name[i];
+			new_test_name[i + 1] = '\0';
 		}
-		
-		char result_data[2][1024] = {
-			"C:/Users/k1410159/source/repos/Human_Detection_for_Only_One_Pose/Human_Detection_for_Only_One_Pose/result_data/CD/",
-			"C:/Users/k1410159/source/repos/Human_Detection_for_Only_One_Pose/Human_Detection_for_Only_One_Pose/result_data/all/",
-		};
+		count = 0;
 
-		char result_binary_all[2][1024] = {
-			"C:/Users/k1410159/source/repos/Human_Detection_for_Only_One_Pose/Human_Detection_for_Only_One_Pose/result_binary/CD/",
-			"C:/Users/k1410159/source/repos/Human_Detection_for_Only_One_Pose/Human_Detection_for_Only_One_Pose/result_binary/all/",
-		};
+		char test_path[1024] = "C:/photo/test_data_from_demo/test_data/";
+		strcat_s(test_path, new_test_name);
 
-		count_all = count_sta = count_squ = count_lie = 0;
+		for (int i = 0; i < 1024; i++) {
+			if (new_test_name[i] == 'b') {
+				new_test_name[i] = 't';
+				new_test_name[i + 1] = 'x';
+				new_test_name[i + 2] = 't';
+				new_test_name[i + 3] = '\0';
+				break;
+			}
+			else new_test_name[i] = new_test_name[i];
+		}
+		char result_path[1024] = "result_data/";
+		strcat_s(result_path, new_test_name);
 
-		cout << "sgg" << endl;
+		if (fopen_s(&result_data, result_path, "a") != 0) {
+			cout << "missing 2" << endl;
+			return 0;
+		}
+
 
 		//画像の取り込み
-		char new_test_name[1024] = "C:/photo/train_data_from_demo/pre_experiment_data/test_data/";
-		strcat_s(new_test_name,256,test_name);
+		cv::Mat ans_img_CF = cv::imread(test_path, 1);	//検出する画像
+														//		cv::Mat ans_img_CF = cv::imread("Sun_Nov_26_14_02_00_95.bmp", 1);	//検出する画像
+		cv::Mat check_img = ans_img_CF.clone();
 
-		cout << new_test_name << endl;
+		cout << file_num << ":" << new_test_name << endl;
+		file_num++;
 
-		cv::Mat ans_img_all = cv::imread(new_test_name, 1);	//検出する画像
-//		cv::Mat ans_img_all = cv::imread("Sun_Nov_26_11_21_46_84.bmp", 1);	//検出する画像
-		cv::Mat binary[5] = { 
-			cv::Mat::zeros(ans_img_all.rows, ans_img_all.cols, CV_8UC3),
-			cv::Mat::zeros(ans_img_all.rows, ans_img_all.cols, CV_8UC3) };
-
-		cv::Mat check_img = ans_img_all.clone();
-
-		cv::imshow("", ans_img_all);
-		cvWaitKey(0);
-
-
-		return 0;
-
-		//リザルトファイルに画像ファイル名を書き込み
-//		fprintf_s(result_text, new_result_name);
-
-//		cout << file_num << ":" << new_test_name << endl;
-//		file_num++;
+		//	cv::imshow("", ans_img_CF);
+		//	cvWaitKey(0);
 
 		//Detect_Placeオブジェクトの作成
-		Detect_Place det_CD[200];
-		Detect_Place det_ST[200];
-		Detect_Place det_SQ[200];
-		Detect_Place det_LI[200];
-
+		Detect_Place detect[500];
 
 		//Coarse Detectorによる人物検出
-		cv::Mat CD_all[200];
-		cv::Mat CD_sta[200];
-		cv::Mat CD_squ[200];
-		cv::Mat CD_lie[200];
+		//	cv::Mat CD_img[300];
 
-		float normalize_num[15] = { 64,96,128,160,192,224,-1 };
+		float normalize_num[10] = { 128,192,256,320,-1 };
+		//		float normalize_num[10] = { 96, 144, 192, 240, 288, 336,-1 };
+
 
 		for (int img_size = 0; normalize_num[img_size] != -1; img_size++) {
 			cv::Mat img;			//検出矩形処理を施す画像
-			cvtColor(ans_img_all, img, CV_RGB2GRAY);
+			cvtColor(ans_img_CF, img, CV_RGB2GRAY);
 			cv::resize(img, img, cv::Size(), normalize_num[img_size] / img.rows, normalize_num[img_size] / img.rows, CV_INTER_LINEAR);
-			for (int y = 0; (y + 32) <= img.rows; y += 4) {
-				for (int x = 0; (x + 32) <= img.cols; x += 4) {
-					//全体検出器＋座位
-					if ((x + 64) <= img.cols && (y + 64) <= img.rows) {
-						cv::Mat d_im(img, cv::Rect(x, y, 64, 64));
-						hog_dim = dimension(d_im.cols, d_im.rows);
-						float hog_vector[6562];							//各次元のHOGを格納
-						get_HOG(d_im, hog_vector);	//HOGの取得
-						double ans = predict(hog_vector, hog_dim, CD);	//尤度の算出
-						if (ans >= YUDO_CD) {//尤度から人物か非人物かの判断
-							det_CD[count_all].C_yudo = ans;
-							det_CD[count_all].C_x = x * 480 / normalize_num[img_size];
-							det_CD[count_all].C_y = y * 480 / normalize_num[img_size];
-							det_CD[count_all].C_width = 64 * 480 / normalize_num[img_size];
-							det_CD[count_all].C_height = 64 * 480 / normalize_num[img_size];
-							det_CD[count_all].ratio_num = img_size;
-							CD_all[count_all] = img.clone();
-							CD_all[count_all] = CD_all[count_all](cv::Rect(x, y, 64, 64));
-							count_all++;
-							check_img = draw_rectangle(check_img, det_CD[count_all - 1].C_x, det_CD[count_all - 1].C_y, det_CD[count_all - 1].C_width, det_CD[count_all - 1].C_height, 255, 255, 255);
-						}
-						ans = 0;
-						ans = predict(hog_vector, hog_dim, Squat);	//尤度の算出
-						if (ans >= YUDO_CD) {//尤度から人物か非人物かの判断
-							det_SQ[count_squ].C_yudo = ans;
-							det_SQ[count_squ].C_x = x * 480 / normalize_num[img_size];
-							det_SQ[count_squ].C_y = y * 480 / normalize_num[img_size];
-							det_SQ[count_squ].C_width = 64 * 480 / normalize_num[img_size];
-							det_SQ[count_squ].C_height = 64 * 480 / normalize_num[img_size];
-							det_SQ[count_squ].ratio_num = img_size;
-							CD_squ[count_squ] = img.clone();
-							CD_squ[count_squ] = CD_squ[count_squ](cv::Rect(x, y, 64, 64));
-							count_squ++;
-							check_img = draw_rectangle(check_img, det_SQ[count_squ - 1].C_x, det_SQ[count_squ - 1].C_y, det_SQ[count_squ - 1].C_width, det_SQ[count_squ - 1].C_height, 255, 0, 0);
-						}
+			for (int y = 0; (y + 128) <= img.rows; y += 8) {
+				for (int x = 0; (x + 128) <= img.cols; x += 8) {
+					cv::Mat d_im(img, cv::Rect(x, y, 128, 128));
+					cv::resize(d_im, d_im, cv::Size(), 96.0 / d_im.cols, 96.0 / d_im.rows);
 
-					}
-					//立位
-					if ((y + 64) <= img.rows) {
-						cv::Mat d_im(img, cv::Rect(x, y, 32, 64));
-						hog_dim = dimension(d_im.cols, d_im.rows);
-						float hog_vector[6562];							//各次元のHOGを格納
-						get_HOG(d_im, hog_vector);	//HOGの取得
-						double ans = predict(hog_vector, hog_dim, Stand);	//尤度の算出
-						if (ans >= YUDO_CD) {//尤度から人物か非人物かの判断
-							det_ST[count_sta].C_yudo = ans;
-							det_ST[count_sta].C_x = x * 480 / normalize_num[img_size];
-							det_ST[count_sta].C_y = y * 480 / normalize_num[img_size];
-							det_ST[count_sta].C_width = 32 * 480 / normalize_num[img_size];
-							det_ST[count_sta].C_height = 64 * 480 / normalize_num[img_size];
-							det_ST[count_sta].ratio_num = img_size;
-							CD_sta[count_sta] = img.clone();
-							CD_sta[count_sta] = CD_sta[count_sta](cv::Rect(x, y, 32, 64));
-							count_sta++;
-							check_img = draw_rectangle(check_img, det_ST[count_sta - 1].C_x, det_ST[count_sta - 1].C_y, det_ST[count_sta - 1].C_width, det_ST[count_sta - 1].C_height, 0, 255, 0);
-						}
-					}
-					//臥位
-					if ((x + 64) <= img.cols) {
-						cv::Mat d_im(img, cv::Rect(x, y, 64, 32));
-						hog_dim = dimension(d_im.cols, d_im.rows);
-						float hog_vector[6562];							//各次元のHOGを格納
-						get_HOG(d_im, hog_vector);	//HOGの取得
-						double ans = predict(hog_vector, hog_dim, Squat);	//尤度の算出
-						if (ans >= YUDO_CD) {//尤度から人物か非人物かの判断
-							det_LI[count_lie].C_yudo = ans;
-							det_LI[count_lie].C_x = x * 480 / normalize_num[img_size];
-							det_LI[count_lie].C_y = y * 480 / normalize_num[img_size];
-							det_LI[count_lie].C_width = 64 * 480 / normalize_num[img_size];
-							det_LI[count_lie].C_height = 32 * 480 / normalize_num[img_size];
-							det_LI[count_lie].ratio_num = img_size;
-							CD_lie[count_lie] = img.clone();
-							CD_lie[count_lie] = CD_lie[count_lie](cv::Rect(x, y, 64, 32));
-							count_lie++;
-							check_img = draw_rectangle(check_img, det_LI[count_lie - 1].C_x, det_LI[count_lie - 1].C_y, det_LI[count_lie - 1].C_width, det_LI[count_lie - 1].C_height, 0, 0, 255);
-						}
-					}
+					hog_dim = dimension(d_im.cols, d_im.rows);
+					float hog_vector[20000];						//各次元のHOGを格納
+					get_HOG(d_im, hog_vector);	//HOGの取得
+					double ans = predict(hog_vector, hog_dim, CD);	//尤度の算出
+					if (ans >= YUDO_CD) {//尤度から人物か非人物かの判断
+										 //		cout << ans << endl;
 
+						detect[count].C_yudo = ans;
+						detect[count].C_x = x * 480 / normalize_num[img_size];
+						detect[count].C_y = y * 480 / normalize_num[img_size];
+						detect[count].C_width = 128 * 480 / normalize_num[img_size];
+						detect[count].C_height = 128 * 480 / normalize_num[img_size];
+						detect[count].ratio_num = img_size;
+						//		CD_img[count] = img.clone();
+						//		CD_img[count] = CD_img[count](cv::Rect(x, y, 128, 128));
+						//		check_img = draw_rectangle(check_img, detect[count].C_x, detect[count].C_y, detect[count].C_width, detect[count].C_height, 255, 0, 0);
+						count++;
+					}
 				}
 			}
 		}
-		
-		cv::imshow("check", check_img);
-		cvWaitKey(0);
+
+		//	cv::imshow("", check_img);
+		//	cvWaitKey(0);
 
 		//領域の統一
 		int t_num = 0;
-		for (int n = 0; det_CD[n].C_yudo != 0; n++) {
-			if (det_CD[n].territory_num == -1) {
+		for (int n = 0; detect[n].C_yudo != 0; n++) {
+			if (detect[n].territory_num == -1) {
 				t_num++;
-				det_CD[n].territory_num = t_num;
+				detect[n].territory_num = t_num;
 			}
-			for (int m = n + 1; det_CD[m].C_yudo != 0; m++) {
-				if ((det_CD[n].C_x + det_CD[n].C_width/2) - 100 <= (det_CD[m].C_x + det_CD[m].C_width/2)
-					&& 
-					(det_CD[m].C_x + det_CD[m].C_width/2) <= (det_CD[n].C_x + det_CD[n].C_width/2) + 100
+			for (int m = n + 1; detect[m].C_yudo != 0; m++) {
+				if ((detect[n].C_x + detect[n].C_width / 2) - 50 <= (detect[m].C_x + detect[m].C_width / 2)
+					&& (detect[m].C_x + detect[m].C_width / 2) <= (detect[n].C_x + detect[n].C_width / 2) + 50
 					&&
-					(det_CD[n].C_y + det_CD[n].C_height/2) - 100 <= (det_CD[m].C_y + det_CD[m].C_height/2)
-					&& 
-					(det_CD[m].C_y + det_CD[m].C_height/2) <= (det_CD[n].C_y + det_CD[n].C_height/2) + 100) {
+					(detect[n].C_y + detect[n].C_height / 2) - 50 <= (detect[m].C_y + detect[m].C_height / 2)
+					&& (detect[m].C_y + detect[m].C_height / 2) <= (detect[n].C_y + detect[n].C_height / 2) + 50) {
 
-					det_CD[m].territory_num = det_CD[n].territory_num;
+					detect[m].territory_num = detect[n].territory_num;
 				}
 			}
 
 		}
-		//統一領域ごとに検出結果の表示
+
+		Detect_Place Det_Fin[20];
+		int Fin_count = 0;
+		//統一領域ごとに最大尤度を算出
 		for (int i = 1; i <= t_num; i++) {
 			int final_num = 0;
 			float cyudo = 0;
-			for (int k = 0; det_CD[k].C_yudo != 0; k++) {
-			
-				if (det_CD[k].territory_num == i && det_CD[k].C_yudo > cyudo) {
+			int area = 0;
+			for (int k = 0; detect[k].C_yudo != 0; k++) {
+				if (detect[k].territory_num == i && detect[k].C_yudo > cyudo) {
 					final_num = k;
-					cyudo = det_CD[k].C_yudo;
-
+					cyudo = detect[k].C_yudo;
 				}
 			}
-
-			//矩形表示
-			ans_img_all = draw_rectangle(ans_img_all, det_CD[final_num].C_x, det_CD[final_num].C_y, det_CD[final_num].C_width, det_CD[final_num].C_height, 255, 255, 255);
-
-			//結果をテキストファイルに保存
-//			fprintf_s(result_text, " , %d, %d, %d, %d", detect[final_num].C_x, detect[final_num].C_y, detect[final_num].C_width, detect[final_num].C_height);
-
-			for (int n = det_CD[final_num].C_y; n < det_CD[final_num].C_y + det_CD[final_num].C_height ; n++) {
-				for (int m = det_CD[final_num].C_x; n < det_CD[final_num].C_x + det_CD[final_num].C_width ; m++) {
-					binary[0].at<cv::Vec3b>(n, m) = cv::Vec3b(255, 255, 255);
-				}
-			}
-
+			Det_Fin[Fin_count] = detect[final_num];
+			Det_Fin[Fin_count].territory_num = -1;
+			Fin_count++;
 		}
-
-		//領域の統一・立位
+		//最大領域をさらに統一
 		t_num = 0;
-		for (int n = 0; det_ST[n].C_yudo != 0; n++) {
-			if (det_ST[n].territory_num == -1) {
+		for (int n = 0; Det_Fin[n].C_yudo != 0; n++) {
+			if (Det_Fin[n].territory_num == -1) {
 				t_num++;
-				det_ST[n].territory_num = t_num;
+				Det_Fin[n].territory_num = t_num;
 			}
-			for (int m = n + 1; det_ST[m].C_yudo != 0; m++) {
-				if ((det_ST[n].C_x + det_ST[n].C_width/2) - 100 <= (det_ST[m].C_x + det_ST[m].C_width/2)
+			for (int m = n + 1; Det_Fin[m].C_yudo != 0; m++) {
+				if ((Det_Fin[n].C_x + Det_Fin[n].C_width / 2) - 50 <= (Det_Fin[m].C_x + Det_Fin[m].C_width / 2)
+					&& (Det_Fin[m].C_x + Det_Fin[m].C_width / 2) <= (Det_Fin[n].C_x + Det_Fin[n].C_width / 2) + 50
 					&&
-					(det_ST[m].C_x + det_ST[m].C_width/2) <= (det_ST[n].C_x + det_ST[n].C_width/2) + 100
-					&&
-					(det_ST[n].C_y + det_ST[n].C_height/2) - 100 <= (det_ST[m].C_y + det_ST[m].C_height/2)
-					&&
-					(det_ST[m].C_y + det_ST[m].C_height/2) <= (det_ST[n].C_y + det_ST[n].C_height/2) + 100) {
+					(Det_Fin[n].C_y + Det_Fin[n].C_height / 2) - 50 <= (Det_Fin[m].C_y + Det_Fin[m].C_height / 2)
+					&& (Det_Fin[m].C_y + Det_Fin[m].C_height / 2) <= (Det_Fin[n].C_y + Det_Fin[n].C_height / 2) + 50) {
 
-					det_ST[m].territory_num = det_ST[n].territory_num;
+					Det_Fin[m].territory_num = Det_Fin[n].territory_num;
 				}
 			}
 
 		}
-		//統一領域ごとに検出結果の表示
+
 		for (int i = 1; i <= t_num; i++) {
 			int final_num = 0;
 			float cyudo = 0;
-			for (int k = 0; det_ST[k].C_yudo != 0; k++) {
-
-				if (det_ST[k].territory_num == i && det_ST[k].C_yudo > cyudo) {
+			int area = 0;
+			for (int k = 0; Det_Fin[k].C_yudo != 0; k++) {
+				if (Det_Fin[k].territory_num == i && Det_Fin[k].C_yudo > cyudo) {
 					final_num = k;
-					cyudo = det_ST[k].C_yudo;
-
+					cyudo = Det_Fin[k].C_yudo;
 				}
 			}
+			fprintf_s(result_data, "%f", Det_Fin[final_num].C_yudo);
+			fprintf_s(result_data, "\n");
+			fprintf_s(result_data, "%d", Det_Fin[final_num].C_x);
+			fprintf_s(result_data, "\n");
+			fprintf_s(result_data, "%d", Det_Fin[final_num].C_y);
+			fprintf_s(result_data, "\n");
+			fprintf_s(result_data, "%d", Det_Fin[final_num].C_width);
+			fprintf_s(result_data, "\n");
+			fprintf_s(result_data, "%d", Det_Fin[final_num].C_height);
+			fprintf_s(result_data, "\n");
 
-			//矩形表示
-			ans_img_all = draw_rectangle(ans_img_all, det_ST[final_num].C_x, det_ST[final_num].C_y, det_ST[final_num].C_width, det_ST[final_num].C_height, 0, 255, 0);
-
-			//結果をテキストファイルに保存
-			//			fprintf_s(result_text, " , %d, %d, %d, %d", detect[final_num].C_x, detect[final_num].C_y, detect[final_num].C_width, detect[final_num].C_height);
-
-			//			for (int n = detect[final_num].C_y; n < detect[final_num].C_y + detect[final_num].C_height ; n++) {
-			//				for (int m = detect[final_num].C_x; n < detect[final_num].C_x + detect[final_num].C_width ; m++) {
-			//					res_bin.at<cv::Vec3b>(n, m) = cv::Vec3b(255, 255, 255);
-			//				}
-			//			}
-
+			printf("%f, %d, %d, %d, %d\n", Det_Fin[final_num].C_yudo, Det_Fin[final_num].C_x, Det_Fin[final_num].C_y, Det_Fin[final_num].C_width, Det_Fin[final_num].C_height);
+			//	ans_img_CF = draw_rectangle(ans_img_CF, Det_Fin[final_num].C_x, Det_Fin[final_num].C_y, Det_Fin[final_num].C_width, Det_Fin[final_num].C_height, 255, 0, 0);
 		}
-
-		//領域の統一・座位
-		t_num = 0;
-		for (int n = 0; det_SQ[n].C_yudo != 0; n++) {
-			if (det_SQ[n].territory_num == -1) {
-				t_num++;
-				det_SQ[n].territory_num = t_num;
-			}
-			for (int m = n + 1; det_SQ[m].C_yudo != 0; m++) {
-				if ((det_SQ[n].C_x + det_SQ[n].C_width/2) - 100 <= (det_SQ[m].C_x + det_SQ[m].C_width/2)
-					&&
-					(det_SQ[m].C_x + det_SQ[m].C_width/2) <= (det_SQ[n].C_x + det_SQ[n].C_width/2) + 100
-					&&
-					(det_SQ[n].C_y + det_SQ[n].C_height/2) - 100 <= (det_SQ[m].C_y + det_SQ[m].C_height/2)
-					&&
-					(det_SQ[m].C_y + det_SQ[m].C_height/2) <= (det_SQ[n].C_y + det_SQ[n].C_height/2) + 100) {
-
-					det_SQ[m].territory_num = det_SQ[n].territory_num;
-				}
-			}
-
-		}
-		//統一領域ごとに検出結果の表示
-		for (int i = 1; i <= t_num; i++) {
-			int final_num = 0;
-			float cyudo = 0;
-			for (int k = 0; det_SQ[k].C_yudo != 0; k++) {
-
-				if (det_SQ[k].territory_num == i && det_SQ[k].C_yudo > cyudo) {
-					final_num = k;
-					cyudo = det_SQ[k].C_yudo;
-
-				}
-			}
-
-			//矩形表示
-			ans_img_all = draw_rectangle(ans_img_all, det_SQ[final_num].C_x, det_SQ[final_num].C_y, det_SQ[final_num].C_width, det_SQ[final_num].C_height, 255, 0, 0);
-
-			//結果をテキストファイルに保存
-			//			fprintf_s(result_text, " , %d, %d, %d, %d", detect[final_num].C_x, detect[final_num].C_y, detect[final_num].C_width, detect[final_num].C_height);
-
-			//			for (int n = detect[final_num].C_y; n < detect[final_num].C_y + detect[final_num].C_height ; n++) {
-			//				for (int m = detect[final_num].C_x; n < detect[final_num].C_x + detect[final_num].C_width ; m++) {
-			//					res_bin.at<cv::Vec3b>(n, m) = cv::Vec3b(255, 255, 255);
-			//				}
-			//			}
-
-		}
-
-		//領域の統一・臥位
-		t_num = 0;
-		for (int n = 0; det_LI[n].C_yudo != 0; n++) {
-			if (det_LI[n].territory_num == -1) {
-				t_num++;
-				det_LI[n].territory_num = t_num;
-			}
-			for (int m = n + 1; det_LI[m].C_yudo != 0; m++) {
-				if ((det_LI[n].C_x + det_LI[n].C_width/2) - 100 <= (det_LI[m].C_x + det_LI[m].C_width/2)
-					&&
-					(det_LI[m].C_x + det_LI[m].C_width/2) <= (det_LI[n].C_x + det_LI[n].C_width/2) + 100
-					&&
-					(det_LI[n].C_y + det_LI[n].C_height/2) - 100 <= (det_LI[m].C_y + det_LI[m].C_height/2)
-					&&
-					(det_LI[m].C_y + det_LI[m].C_height/2) <= (det_LI[n].C_y + det_LI[n].C_height/2) + 100) {
-
-					det_LI[m].territory_num = det_LI[n].territory_num;
-				}
-			}
-
-		}
-		//統一領域ごとに検出結果の表示
-		for (int i = 1; i <= t_num; i++) {
-			int final_num = 0;
-			float cyudo = 0;
-			for (int k = 0; det_LI[k].C_yudo != 0; k++) {
-
-				if (det_LI[k].territory_num == i && det_LI[k].C_yudo > cyudo) {
-					final_num = k;
-					cyudo = det_LI[k].C_yudo;
-
-				}
-			}
-
-			//矩形表示
-			ans_img_all = draw_rectangle(ans_img_all, det_LI[final_num].C_x, det_LI[final_num].C_y, det_LI[final_num].C_width, det_LI[final_num].C_height, 0, 0, 255);
-
-			//結果をテキストファイルに保存
-			//			fprintf_s(result_text, " , %d, %d, %d, %d", detect[final_num].C_x, detect[final_num].C_y, detect[final_num].C_width, detect[final_num].C_height);
-
-			//			for (int n = detect[final_num].C_y; n < detect[final_num].C_y + detect[final_num].C_height ; n++) {
-			//				for (int m = detect[final_num].C_x; n < detect[final_num].C_x + detect[final_num].C_width ; m++) {
-			//					res_bin.at<cv::Vec3b>(n, m) = cv::Vec3b(255, 255, 255);
-			//				}
-			//			}
-
-		}
-
-		cv::imshow("", ans_img_all);
-		cvWaitKey(0);
-
-		//テキストファイル改行
-//		fprintf_s(result_text, "\n");
-
-//		cv::cvtColor(res_bin, res_bin, CV_RGB2GRAY);
-//		cv::imwrite(new_binary_name, res_bin);
-
-		//画像の保存(検出ができていてもいなくても保存)
-//		cv::imwrite(new_result_name, ans_img_all);
-
+		//	cv::imshow("", ans_img_CF);
+		//	cvWaitKey(0);
+		fclose(result_data);
 	}
+
 	fclose(test_data);
 
 	return 0;
